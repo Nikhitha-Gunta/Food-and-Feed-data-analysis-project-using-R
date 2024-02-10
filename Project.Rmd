@@ -1,0 +1,210 @@
+---
+title: " Exploring Global Food and Feed Production Trends: A Comprehensive Analysis"
+author: "Nikhitha Gunta"
+date: "2023-12-08"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction
+The provided dataset offers a crucial perspective on global food production, highlighting the balance between food cultivated for human consumption and feed produced for animals. This information is particularly relevant given the projected surge in the world's population from 7.3 billion to 9.7 billion by 2050. Addressing the challenges of feeding this growing population necessitates innovative approaches in agricultural practices and dietary habits. Moreover, these strategies must be developed in the context of an evolving climate, which both impacts and is impacted by agricultural methods. Analyzing this dataset can provide valuable insights into current production trends and help in formulating sustainable solutions to meet future food demands while considering environmental implications
+
+ 
+# Data Acquisition
+I acquired the dataset from Kaggle:
+https://www.kaggle.com/datasets/dorbicycle/world-foodfeed-production/data
+
+
+```{r}
+
+# Load necessary libraries
+library(tidyverse) # for data manipulation and visualization
+library(dplyr)  # for data manipulation
+library(ggplot2) # for data visualization
+
+# Read in the dataset from the specified location
+agriculture_data <- read.csv("E:/FInal Project/FAO.csv")
+
+# Display the structure of the dataframe
+str(agriculture_data)
+
+# Convert from a wide dataset to a long dataset using pivot_longer
+agriculture_data_long <- agriculture_data %>%
+  pivot_longer(cols = starts_with("Y"),
+               names_to = "Year",
+               values_to = "Production")
+
+# Display a summary of the long dataset
+summary(agriculture_data_long)
+str(agriculture_data_long)
+
+# Convert years to integers
+agriculture_data_long$Year <- as.integer(gsub("Y", "", agriculture_data_long$Year))
+
+# Remove rows with NA in the Production column
+agriculture_data_long <- agriculture_data_long %>%
+  drop_na(Production)
+
+# Display a summary of the updated dataset
+summary(agriculture_data_long)
+
+# Identify rows where production is negative
+rows_with_negative_production <- which(agriculture_data_long$Production < 0)
+print(rows_with_negative_production)
+
+# Filter out rows with negative production
+agriculture_data_filtered <- agriculture_data_long %>%
+  filter(Production >= 0)
+
+# Display a summary of the filtered dataset
+summary(agriculture_data_filtered)
+
+# Select relevant columns for analysis
+agriculture_analysis_data <- agriculture_data_filtered %>%
+  select(Area,Item,Element,Unit,Year,Production)
+
+# Display a summary of the analysis dataset
+summary(agriculture_analysis_data)
+
+# Display unique values in the 'Element' column
+unique(agriculture_data_filtered$Element)
+
+# Convert 'Element' column to a factor
+agriculture_analysis_data<- agriculture_analysis_data %>%
+  mutate(Element = factor(Element))
+
+# Aggregate data by Area, Item, Unit, Year, and Element
+aggregated_data <- agriculture_analysis_data %>%
+  group_by(Area, Item, Unit, Year, Element) %>%
+  summarise(Production = sum(Production), .groups = "drop")
+
+# Display a summary of the aggregated data
+summary(aggregated_data)
+
+# Pivot the data to wider format for better visualization
+aggregated_data <- pivot_wider(
+  data = aggregated_data,
+  names_from = Element,
+  values_from = Production,
+  values_fill = 0
+)
+
+```
+#################### EXPLORATORY DATA ANALYSIS ###########################
+```{r}
+# Visualize the trends of Food and Feed production over time
+ggplot(aggregated_data, aes(x = Year)) +
+  geom_line(aes(y = Food, color = "Total Food")) +
+  geom_line(aes(y = Feed, color = "Total Feed")) +
+  labs(title = "Total Food and Feed Production Over Time",
+       x = "Year", y = "Production Quantity")
+```
+#The data shows that food production has gone up a lot more than feed production over these years. There's a big difference in how much food and feed we produce
+
+```{r food-producers-plot, fig.cap="China, India, and the USA are the largest food producers. Among the top five, Germany and Brazil contribute the smallest amounts."}
+#Top 5 food producers since 1961
+
+# Calculate top 5  food producers
+
+largest_food_producers <- aggregated_data %>%
+  group_by(Area) %>%
+  summarize(Food = sum(Food, na.rm = TRUE)) %>%
+  arrange(desc(Food))
+
+# Display the top 5 largest food producers
+top_n_producers <- 5
+top_food_producers <- head(largest_food_producers, n = top_n_producers)
+
+# Convert production to million tons for visualization
+top_food_producers$Total_Food_Million_Tons <- top_food_producers$Food / 1e6
+
+# Visualize the top 5 food producers in a bar chart
+ggplot(top_food_producers, aes(x = reorder(Area, Total_Food_Million_Tons), y = Total_Food_Million_Tons)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(title = paste("Top", top_n_producers, "Largest Food Producers"),
+       x = "Country/Region", y = "Total Food Production(in  millon Tonnes)")
+
+```
+
+```{r feed-producers-plot, fig.cap="The United States and China top the list as the biggest producers of animal feed, with Poland, Germany, and Brazil lagging behind with significantly smaller production volumes."}
+
+# Similar steps for largest feed producers
+largest_feed_producers <- aggregated_data %>%
+  group_by(Area) %>%
+  summarize(Feed = sum(Feed, na.rm = TRUE)) %>%
+  arrange(desc(Feed))
+
+# Display the top N largest food producers (e.g., top 5)
+top_n_producers <- 5
+top_feed_producers <- head(largest_feed_producers, n = top_n_producers)
+
+# Convert production to million tons
+top_feed_producers$Total_Feed_Million_Tons <- top_feed_producers$Feed / 1e6
+
+# Visualization (bar chart)
+ggplot(top_feed_producers, aes(x = reorder(Area, Total_Feed_Million_Tons), y = Total_Feed_Million_Tons)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(title = paste("Top", top_n_producers, "Largest Feed Producers"),
+       x = "Country/Region", y = "Total Feed Production(in  millon Tonnes)")
+
+```
+
+```{r food-item-plot, fig.cap="Since 1961, cereals and milk have topped the charts as the food items with the highest production."}
+
+# Filter data for 'Food' element
+food_data <- agriculture_analysis_data %>% filter(Element == "Food")
+
+# Group by item, calculate the total production for each item
+item_production <- food_data %>%
+  group_by(Item) %>%
+  summarize(Total_Production = sum(Production, na.rm = TRUE)) %>%
+  arrange(desc(Total_Production)) %>%
+  head(5)  # Select the top 5 items
+  
+# Filter the original data for the top 10 food items
+top_food_data <- food_data %>% filter(Item %in% item_production$Item)
+
+top_food_data_aggregated <- top_food_data %>%
+  group_by(Year, Item) %>%
+  summarize(Total_Production = sum(Production, na.rm = TRUE))
+
+# Create a line plot for the aggregated production of top food items
+ggplot(top_food_data_aggregated, aes(x = Year, y = Total_Production/1e6, color = Item)) +
+  geom_line() +
+  labs(title = "Aggregated Production Trends of Top 5 Food Items",
+       x = "Year", y = "Total Production (Millions of Tons)",
+       color = "Food Item") +
+  theme(legend.position = "right")
+
+```
+
+#We will now investigate the leading items produced for animal feed
+
+```{r feed-item-plot, fig.cap="The production of cereals and maize as feed has sharply increased since the 1980s, while other feed items like barley, milk, and starchy roots have seen only modest growth."}
+
+# Filter data for 'Feed' element
+feed_data <- agriculture_analysis_data %>% filter(Element == "Feed")
+
+# Group by item, calculate the total production for each item
+item_production_feed <- feed_data %>%
+  group_by(Item) %>%
+  summarize(Total_Production = sum(Production, na.rm = TRUE)) %>%
+  arrange(desc(Total_Production)) %>%
+  head(5)  # Select the top 10 items
+
+# Filter the original data for the top 10 feed items
+top_feed_data <- feed_data %>% filter(Item %in% item_production_feed$Item)
+
+top_feed_data_aggregated <- top_feed_data %>%
+  group_by(Year, Item) %>%
+  summarize(Total_Production = sum(Production, na.rm = TRUE))
+
+# Create a line plot for the aggregated production of top feed items
+ggplot(top_feed_data_aggregated, aes(x = Year, y = Total_Production/1e6, color = Item)) +
+  geom_line() +
+  labs(title = "Aggregated Production Trends of Top 5 Feed Items",
+       x = "Year", y = "Total Production (Millions of Tons)",
+       color = "Feed Item") +
+  theme(legend.position = "right")
+```
